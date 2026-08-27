@@ -7,7 +7,6 @@ import { createServer as createViteServer } from "vite";
 
 dotenv.config();
 
-// Set process title for OS task managers
 if (typeof process !== "undefined" && process.title) {
   process.title = "Runtime Realtek";
 }
@@ -21,7 +20,6 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
-// Lazy Google GenAI Client
 let aiClient: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
   if (!aiClient) {
@@ -41,12 +39,10 @@ function getAI(): GoogleGenAI {
   return aiClient;
 }
 
-// 1. Health check
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });
 
-// 2. Real-time Live Interview Answer Generation (Runtime Realtek Core Engine)
 app.post("/api/gemini/answer", async (req, res) => {
   try {
     const {
@@ -55,7 +51,7 @@ app.post("/api/gemini/answer", async (req, res) => {
       supportDocsContext,
       customInstructions,
       jobDescription,
-      answerStyle = "star", // 'star' | 'concise' | 'technical' | 'bullet'
+      answerStyle = "star",
       role = "Software Engineer",
       company = "Tech Company",
       language = "en",
@@ -149,7 +145,6 @@ CRITICAL RULES FOR REAL-TIME RESPONSES:
   }
 });
 
-// 3. Screen / OCR / Coding Problem Solver (Multimodal Vision)
 app.post("/api/gemini/analyze-screen", async (req, res) => {
   try {
     const { imageBase64, mimeType = "image/png", contextText = "", language = "python" } = req.body;
@@ -159,8 +154,6 @@ app.post("/api/gemini/analyze-screen", async (req, res) => {
     }
 
     const ai = getAI();
-
-    // Clean base64 string if data URL prefix exists
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
     const promptText = `You are Runtime Realtek's live coding & screen solver during a technical interview.
@@ -227,11 +220,9 @@ Extract and solve:
   }
 });
 
-// 4. Resume & Job Description Parser & Knowledge Grounding
 app.post("/api/gemini/parse-resume", async (req, res) => {
   try {
     const { rawText, fileBase64, mimeType = "application/pdf" } = req.body;
-
     const ai = getAI();
 
     let parts: any[] = [];
@@ -299,7 +290,6 @@ app.post("/api/gemini/parse-resume", async (req, res) => {
   }
 });
 
-// 5. Mock Interview: Generate Question
 app.post("/api/gemini/mock/generate-question", async (req, res) => {
   try {
     const {
@@ -360,7 +350,6 @@ Make it authentic to ${company}'s actual interview style.`;
   }
 });
 
-// 6. Mock Interview: Evaluate Candidate Answer & Detailed Scorecard
 app.post("/api/gemini/mock/evaluate", async (req, res) => {
   try {
     const {
@@ -440,11 +429,9 @@ Evaluate rigorously yet constructively with realistic FAANG / Top-Tier hiring ba
   }
 });
 
-// 7. Cheat Sheet & Story Bank Generator
 app.post("/api/gemini/cheatsheet", async (req, res) => {
   try {
     const { resumeText, targetRole = "Full Stack Engineer", targetCompany = "Tech" } = req.body;
-
     const ai = getAI();
 
     const prompt = `Generate an interview cheat sheet and custom behavioral story bank for a candidate interviewing for ${targetRole} at ${targetCompany}.
@@ -515,60 +502,6 @@ Generate:
   }
 });
 
-// 8. Server-side TTS generation (Optional fallback for realistic interviewer voice)
-app.post("/api/gemini/tts", async (req, res) => {
-  try {
-    const { text, voiceName = "Kore" } = req.body;
-    if (!text) {
-      return res.status(400).json({ error: "Text is required" });
-    }
-
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: text.slice(0, 400) }] }],
-      config: {
-        responseModalities: ["AUDIO"],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: voiceName || "Kore" },
-          },
-        },
-      },
-    });
-
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (base64Audio) {
-      res.json({ success: true, audioBase64: base64Audio });
-    } else {
-      res.status(500).json({ error: "No audio generated" });
-    }
-  } catch (error: any) {
-    console.warn("TTS API failed or unavailable, frontend will use Web Speech synthesis fallback:", error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 9. Source Code & Desktop Binary Archive Download Endpoint
-app.get(["/runtime_realtek_source_code.tar.gz", "/api/download/archive"], (req, res) => {
-  import("child_process").then(({ exec }) => {
-    const archivePath = "/tmp/runtime_realtek_source_code.tar.gz";
-    exec(
-      `tar --exclude='./node_modules' --exclude='./dist' --exclude='./.git' -czf ${archivePath} -C ${process.cwd()} .`,
-      (err) => {
-        if (err) {
-          console.error("Archive creation error:", err);
-          return res.status(500).send("Could not create archive");
-        }
-        res.download(archivePath, "runtime_realtek_source_code.tar.gz");
-      }
-    );
-  }).catch((err) => {
-    res.status(500).send(err.message);
-  });
-});
-
-// Setup Vite middleware for development vs static build for production
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
